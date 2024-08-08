@@ -104,7 +104,7 @@ ggplot(revenue_by_country, aes(x=reorder(Country, Total_Revenue), y=Total_Revenu
 
 # Add new attribute: Monetary
 retail_grp_monetary <- retail_df %>% group_by(Customer_ID) %>%
-                              summarise(total_revenue = sum(Amount))
+                              summarise(monetary = sum(Amount))
 retail_grp_monetary
 
 # Add new attribute: Frequency
@@ -121,8 +121,8 @@ max_date
 retail_df$Diff <- (max_date - retail_df$Invoice_Date)
 
 retail_grp_recency <- retail_df %>% group_by(Customer_ID) %>% 
-                      summarize(min_recency = min(Diff, na.rm = TRUE))
-retail_grp_recency$min_recency <- as.numeric(retail_grp_recency$min_recency, units = "days")
+                      summarize(recency = min(Diff, na.rm = TRUE))
+retail_grp_recency$recency <- as.numeric(retail_grp_recency$recency, units = "days")
 retail_grp_recency
 
 # Merge the attributes to get the RFM data frame
@@ -132,16 +132,16 @@ rfm_df <- retail_grp_monetary %>%
 rfm_df
 
 # 4.2 Create RFM score
-rfm_df$total_revenue_score <- cut(rfm_df$total_revenue, 
-                                  breaks=quantile(rfm_df$total_revenue, probs=seq(0,1,0.2), na.rm=TRUE),
+rfm_df$revenue_score <- cut(rfm_df$total_revenue, 
+                                  breaks=quantile(rfm_df$revenue, probs=seq(0,1,0.2), na.rm=TRUE),
                                   include.lowest = TRUE,
                                   labels=c(1,2,3,4,5))
 rfm_df$frequency_score <- cut(rfm_df$frequency, 
                                   breaks=quantile(rfm_df$frequency, probs=seq(0,1,0.2), na.rm=TRUE),
                                   include.lowest = TRUE,
                                   labels=c(1,2,3,4,5))
-rfm_df$recency_score <- cut(rfm_df$min_recency, 
-                              breaks=quantile(rfm_df$min_recency, probs=seq(0,1,0.2), na.rm=TRUE),
+rfm_df$recency_score <- cut(rfm_df$recency, 
+                              breaks=quantile(rfm_df$recency, probs=seq(0,1,0.2), na.rm=TRUE),
                               include.lowest = TRUE,
                             labels=c(5,4,3,2,1))
 rfm_df$rfm_score <- paste0(
@@ -164,8 +164,20 @@ seg_map <- c(
   'Champions' = '^5[4-5]$'
 )
 
+# Function to assign segments based on the RFM score
+segment_assign <- function(score, seg_map) {
+  for (segment_name in names(seg_map)) {
+    pattern <- seg_map[[segment_name]]
+    if (grepl(pattern, score)) {
+      return(segment_name)
+    }
+  }
+  return(NA) # Return NA if no pattern matches
+}
 
-rfm_df$Segment <- sapply(rfm_df$rfm_score, segment_map)
+
+rfm_df$Segment <- sapply(rfm_df$rfm_score, function(x) segment_assign(x, seg_map))
+
 head(rfm_df)
 
 
@@ -173,25 +185,23 @@ head(rfm_df)
 rfmStats <- rfm_df %>%
   group_by(Segment) %>%
   summarise(
-    Recency_mean = mean(min_recency, na.rm = TRUE),
-    Recency_median = median(min_recency, na.rm = TRUE),
+    Recency_mean = mean(recency, na.rm = TRUE),
+    Recency_median = median(recency, na.rm = TRUE),
     Recency_count = n(),
-    Recency_std = sd(min_recency, na.rm = TRUE),
+    Recency_std = sd(recency, na.rm = TRUE),
     Frequency_mean = mean(frequency, na.rm = TRUE),
     Frequency_median = median(frequency, na.rm = TRUE),
     Frequency_count = n(),
     Frequency_std = sd(frequency, na.rm = TRUE),
-    Monetary_mean = mean(total_revenue, na.rm = TRUE),
-    Monetary_median = median(total_revenue, na.rm = TRUE),
+    Monetary_mean = mean(monetary, na.rm = TRUE),
+    Monetary_median = median(monetary, na.rm = TRUE),
     Monetary_count = n(),
-    Monetary_std = sd(total_revenue, na.rm = TRUE)
+    Monetary_std = sd(monetary, na.rm = TRUE)
   )
 
 head(rfmStats)
 
-# Visualize Treemap
-install.packages("treemap")
-library(treemap)
+# Visualization
 segment_summary <- rfm_df %>%
   group_by(Segment) %>%
   summarise(Customer_Count = n())
